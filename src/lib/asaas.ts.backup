@@ -1,0 +1,31 @@
+// src/lib/asaas.ts
+export const asaasConfig = {
+  apiKey: process.env.ASAAS_API_KEY!,
+  baseUrl: process.env.NODE_ENV === 'production' 
+    ? 'https://www.asaas.com/api/v3'
+    : 'https://sandbox.asaas.com/api/v3',
+  headers: {
+    'Content-Type': 'application/json',
+    'access_token': process.env.ASAAS_API_KEY!,
+  }
+};
+
+// Função helper para fazer requests
+export async function asaasRequest(endpoint: string, options: RequestInit = {}) {
+  const url = `${asaasConfig.baseUrl}${endpoint}`;
+  
+  const response = await fetch(url, {
+    ...options,
+    headers: {
+      ...asaasConfig.headers,
+      ...options.headers,
+    },
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Asaas API Error: ${response.status} - ${errorText}`);
+  }
+
+  return response.json();
+}
