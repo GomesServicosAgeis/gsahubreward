@@ -1,10 +1,10 @@
-// src/app/register/page.tsx
 'use client';
 
 import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { createClient } from '@/lib/supabase/client';
+// Importamos o objeto pronto 'supabase'
+import { supabase } from '@/lib/supabase/client';
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -17,8 +17,6 @@ export default function RegisterPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
-
-  const supabase = createClient();
 
   useEffect(() => {
     if (referralCode) {
@@ -33,7 +31,6 @@ export default function RegisterPage() {
     setMessage(null);
 
     try {
-      // 1. Cria o usuário no Supabase Auth
       const { data: authData, error: signUpError } = await supabase.auth.signUp({
         email,
         password,
@@ -46,7 +43,6 @@ export default function RegisterPage() {
       if (signUpError) throw signUpError;
       if (!authData.user) throw new Error('Usuário não criado');
 
-      // 2. Chama a RPC para criar tenant e vincular usuário
       const { data: rpcData, error: rpcError } = await supabase.rpc('create_tenant_with_user', {
         p_user_id: authData.user.id,
         p_tenant_name: name || email.split('@')[0],
@@ -59,9 +55,6 @@ export default function RegisterPage() {
       if (!rpcData?.success) throw new Error(rpcData?.error || 'Erro ao criar tenant');
 
       setMessage('Conta criada! Verifique seu e-mail para confirmar.');
-      
-      // Opcional: redireciona para login após cadastro
-      // router.push('/login?message=confirme-email');
     } catch (error: any) {
       setError(error.message || 'Erro ao criar conta');
     } finally {
@@ -91,9 +84,7 @@ export default function RegisterPage() {
 
         <form onSubmit={handleRegister} className="space-y-6">
           <div>
-            <label htmlFor="name" className="block text-sm font-medium text-gray-300 mb-1">
-              Nome
-            </label>
+            <label htmlFor="name" className="block text-sm font-medium text-gray-300 mb-1">Nome</label>
             <input
               id="name"
               type="text"
@@ -106,9 +97,7 @@ export default function RegisterPage() {
           </div>
 
           <div>
-            <label htmlFor="email" className="block text-sm font-medium text-gray-300 mb-1">
-              E-mail
-            </label>
+            <label htmlFor="email" className="block text-sm font-medium text-gray-300 mb-1">E-mail</label>
             <input
               id="email"
               type="email"
@@ -121,9 +110,7 @@ export default function RegisterPage() {
           </div>
 
           <div>
-            <label htmlFor="password" className="block text-sm font-medium text-gray-300 mb-1">
-              Senha
-            </label>
+            <label htmlFor="password" className="block text-sm font-medium text-gray-300 mb-1">Senha</label>
             <input
               id="password"
               type="password"
@@ -146,10 +133,7 @@ export default function RegisterPage() {
         </form>
 
         <div className="mt-8 text-center text-sm text-gray-400">
-          Já tem conta?{' '}
-          <Link href="/login" className="text-blue-400 hover:text-blue-300 font-medium">
-            Fazer login
-          </Link>
+          Já tem conta? <Link href="/login" className="text-blue-400 hover:text-blue-300 font-medium">Fazer login</Link>
         </div>
       </div>
     </div>

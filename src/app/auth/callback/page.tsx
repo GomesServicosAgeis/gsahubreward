@@ -1,9 +1,9 @@
-// src/app/auth/callback/page.tsx
 'use client';
 
 import { useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { createClient } from '@/lib/supabase/client';
+// Importamos o objeto pronto 'supabase'
+import { supabase } from '@/lib/supabase/client';
 
 export default function AuthCallback() {
   const router = useRouter();
@@ -11,9 +11,7 @@ export default function AuthCallback() {
 
   useEffect(() => {
     const handleCallback = async () => {
-      const supabase = createClient();
-
-      // Pega o código do OTP da URL (geralmente type=signup ou type=recovery, token_hash=...)
+      // Pega o código do OTP da URL
       const { data, error } = await supabase.auth.getSession();
 
       if (error) {
@@ -23,13 +21,10 @@ export default function AuthCallback() {
       }
 
       if (data.session) {
-        // Sessão criada com sucesso → redireciona para dashboard
-        // Ou para a URL de redirect se veio no searchParams
         const redirectTo = searchParams.get('redirect') || '/dashboard';
         router.push(redirectTo);
-        router.refresh(); // força atualização do middleware e estado global
+        router.refresh(); 
       } else {
-        // Sem sessão → algo deu errado
         router.push('/login?error=no_session');
       }
     };

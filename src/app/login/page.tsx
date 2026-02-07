@@ -1,7 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import { createClient } from '@/lib/supabase/client';
+// Importação corrigida: pegamos o objeto 'supabase' direto
+import { supabase } from '@/lib/supabase/client'; 
 import { useRouter } from 'next/navigation';
 
 export default function LoginPage() {
@@ -9,7 +10,8 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [message, setMessage] = useState<string | null>(null);
   const router = useRouter();
-  const supabase = createClient();
+
+  // Removido: const supabase = createClient(); (Agora usamos o import direto)
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
