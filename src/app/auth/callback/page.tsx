@@ -1,17 +1,16 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, Suspense } from 'react'; // Importamos Suspense
 import { useRouter, useSearchParams } from 'next/navigation';
-// Importamos o objeto pronto 'supabase'
 import { supabase } from '@/lib/supabase/client';
 
-export default function AuthCallback() {
+// Criamos um componente interno para o conteúdo
+function AuthCallbackContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
   useEffect(() => {
     const handleCallback = async () => {
-      // Pega o código do OTP da URL
       const { data, error } = await supabase.auth.getSession();
 
       if (error) {
@@ -23,7 +22,7 @@ export default function AuthCallback() {
       if (data.session) {
         const redirectTo = searchParams.get('redirect') || '/dashboard';
         router.push(redirectTo);
-        router.refresh(); 
+        router.refresh();
       } else {
         router.push('/login?error=no_session');
       }
@@ -33,12 +32,21 @@ export default function AuthCallback() {
   }, [router, searchParams]);
 
   return (
+    <div className="text-center text-white">
+      <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-blue-500 border-solid mx-auto mb-6"></div>
+      <h2 className="text-2xl font-bold mb-2">Processando autenticação...</h2>
+      <p className="text-gray-400">Aguarde um momento, você será redirecionado.</p>
+    </div>
+  );
+}
+
+// O export principal envolve o conteúdo em Suspense
+export default function AuthCallback() {
+  return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-900 to-black">
-      <div className="text-center text-white">
-        <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-blue-500 border-solid mx-auto mb-6"></div>
-        <h2 className="text-2xl font-bold mb-2">Processando autenticação...</h2>
-        <p className="text-gray-400">Aguarde um momento, você será redirecionado.</p>
-      </div>
+      <Suspense fallback={<div className="text-white">Carregando...</div>}>
+        <AuthCallbackContent />
+      </Suspense>
     </div>
   );
 }
