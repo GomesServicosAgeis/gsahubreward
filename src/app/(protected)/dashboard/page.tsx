@@ -36,15 +36,8 @@ export default async function DashboardPage() {
     .select('*')
     .single();
 
-  const handleLogout = async () => {
-    'use server';
-    const supabase = await createSupabaseServer();
-    await supabase.auth.signOut();
-    redirect('/login');
-  };
-
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#0a0015] via-[#1a0033] to-[#0f0c1a] text-[#E2E8F0] pt-20"> {/* pt-20 para dar espaço ao header fixo */}
+    <div className="min-h-screen bg-gradient-to-br from-[#0a0015] via-[#1a0033] to-[#0f0c1a] text-[#E2E8F0] pt-20">
       <main className="max-w-7xl mx-auto p-6 lg:p-10">
         {dashError && (
           <div className="bg-[#D73A49]/20 border border-[#D73A49]/50 p-5 rounded-xl mb-8 text-center backdrop-blur-sm">

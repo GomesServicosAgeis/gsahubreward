@@ -3,16 +3,18 @@
 import { useState } from 'react';
 import { supabase } from '@/lib/supabase/client'; 
 import { useRouter } from 'next/navigation';
-import Link from 'next/link'; // Importado para navegação interna
+import Link from 'next/link';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [message, setMessage] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
   const router = useRouter();
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    setLoading(true);
     setMessage(null);
 
     const { error } = await supabase.auth.signInWithPassword({
@@ -22,6 +24,7 @@ export default function LoginPage() {
 
     if (error) {
       setMessage(error.message);
+      setLoading(false);
     } else {
       router.push('/dashboard');
       router.refresh();
@@ -30,17 +33,17 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#0a0015] via-[#1a0033] to-[#0f0c1a] text-[#E2E8F0] flex items-center justify-center p-4">
-      <div className="w-full max-w-md bg-[#1E293B]/70 backdrop-blur-md p-8 rounded-2xl border border-[#334155] shadow-2xl">
+      <div className="w-full max-w-md bg-[#1E293B]/70 backdrop-blur-md p-8 rounded-[2rem] border border-[#334155] shadow-2xl relative z-10">
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-extrabold bg-gradient-to-r from-[#7C3AED] to-[#C084FC] bg-clip-text text-transparent inline-block">
+          <h1 className="text-4xl font-black bg-gradient-to-r from-[#7C3AED] to-[#C084FC] bg-clip-text text-transparent inline-block italic uppercase tracking-tighter">
             GSA Hub
           </h1>
-          <p className="text-[#94A3B8] mt-2">Acesse sua conta para gerenciar seus resultados</p>
+          <p className="text-[#94A3B8] mt-2 font-medium">Acesse sua conta para gerenciar seus resultados</p>
         </div>
 
         <form onSubmit={handleLogin} className="space-y-6">
           <div>
-            <label className="block text-sm font-medium text-[#94A3B8] mb-2">E-mail</label>
+            <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2 ml-1">E-mail</label>
             <input
               type="email"
               placeholder="seu@email.com"
@@ -52,7 +55,7 @@ export default function LoginPage() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-[#94A3B8] mb-2">Senha</label>
+            <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2 ml-1">Senha</label>
             <input
               type="password"
               placeholder="••••••••"
@@ -65,37 +68,36 @@ export default function LoginPage() {
 
           <button
             type="submit"
-            className="w-full py-3 bg-gradient-to-r from-[#7C3AED] to-[#A78BFA] hover:from-[#8B5CF6] hover:to-[#C084FC] text-white font-bold rounded-xl transition-all shadow-lg shadow-[#7C3AED]/20 active:scale-[0.98]"
+            disabled={loading}
+            className="w-full py-4 bg-gradient-to-r from-[#7C3AED] to-[#A78BFA] hover:from-[#8B5CF6] hover:to-[#C084FC] text-white font-black rounded-xl transition-all shadow-lg shadow-[#7C3AED]/20 active:scale-[0.98] uppercase text-xs tracking-widest disabled:opacity-50"
           >
-            Entrar no Sistema
+            {loading ? 'Entrando...' : 'Entrar no Sistema'}
           </button>
 
           {message && (
-            <div className="p-3 bg-[#D73A49]/20 border border-[#D73A49]/50 rounded-lg text-[#D73A49] text-sm text-center animate-pulse">
+            <div className="p-3 bg-[#D73A49]/20 border border-[#D73A49]/50 rounded-lg text-[#D73A49] text-[10px] font-bold text-center uppercase">
               {message}
             </div>
           )}
 
-          {/* Ajuste: Links de Cadastro e Recuperação */}
-          <div className="mt-8 pt-6 border-t border-[#334155]/50 text-center space-y-4">
-            <div className="flex flex-col gap-1">
-              <p className="text-[#94A3B8] text-sm">Ainda não faz parte do ecossistema?</p>
-              <Link 
-                href="/register" 
-                className="text-[#A78BFA] hover:text-[#C084FC] font-bold text-sm transition-all hover:underline"
-              >
-                Criar minha conta GSA Hub
-              </Link>
-            </div>
-            
+          <div className="mt-6 text-center">
             <Link 
               href="/forgot-password" 
-              className="block text-[11px] text-[#64748B] hover:text-[#94A3B8] transition-colors uppercase tracking-widest font-bold"
+              className="inline-block text-[11px] text-[#64748B] hover:text-[#A78BFA] transition-all font-black uppercase tracking-[0.2em] cursor-pointer"
             >
               Esqueceu sua senha?
             </Link>
           </div>
         </form>
+
+        <div className="mt-8 pt-6 border-t border-[#334155]/50 text-center">
+          <Link 
+            href="/register" 
+            className="text-white hover:text-[#A78BFA] font-black text-sm transition-all uppercase italic"
+          >
+            Criar minha conta GSA Hub
+          </Link>
+        </div>
       </div>
     </div>
   );
