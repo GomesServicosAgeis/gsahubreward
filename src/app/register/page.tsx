@@ -34,7 +34,7 @@ function RegisterContent() {
     setMessage(null);
 
     try {
-      // 1. Criar no Supabase Auth
+      // 1. SignUp no Auth
       const { data: authData, error: signUpError } = await supabase.auth.signUp({
         email,
         password,
@@ -44,84 +44,78 @@ function RegisterContent() {
         },
       });
 
-      // Se der erro de confirmação de e-mail (SMTP), o usuário pode ter sido criado no Auth.
-      // Tentamos seguir com a RPC mesmo assim se o user ID existir.
-      const userId = authData?.user?.id;
+      if (signUpError) throw signUpError;
+      if (!authData.user) throw new Error('Falha ao gerar usuário no sistema.');
 
-      if (signUpError && !userId) {
-        throw new Error("Falha no Auth: " + signUpError.message);
-      }
-
-      if (!userId) throw new Error('ID do usuário não gerado.');
-
-      // 2. Chamar a RPC para garantir que salve na tabela 'users'
+      // 2. RPC para salvar no Banco de Dados
       const { data: rpcData, error: rpcError } = await supabase.rpc('create_tenant_with_user', {
-        p_user_id: userId,
-        p_tenant_name: name || email.split('@')[0],
+        p_user_id: authData.user.id,
+        p_tenant_name: name,
         p_tenant_email: email,
         p_user_name: name,
         p_cpf_cnpj: cpfCnpj,
         p_referral_code: referralCode || null
       });
 
-      if (rpcError) {
-        console.error("Erro na RPC:", rpcError);
-        throw new Error("Perfil não criado: " + rpcError.message);
-      }
+      if (rpcError) throw rpcError;
 
       if (rpcData?.success === false) {
-        throw new Error(rpcData.error || "Erro interno no banco.");
+        throw new Error(rpcData.error || "Erro ao salvar perfil.");
       }
 
-      setMessage('Cadastro realizado com sucesso! Verifique seu e-mail para confirmar.');
+      setMessage('Cadastro realizado! Por favor, confirme seu e-mail para acessar.');
       
+      // Limpeza
+      setName(''); setEmail(''); setPassword(''); setCpfCnpj('');
+
     } catch (err: any) {
-      setError(err.message);
-      console.error("Erro completo no fluxo:", err);
+      setError(err.message === "User already registered" 
+        ? "Este e-mail já está em uso. Tente fazer login ou recuperar a senha." 
+        : err.message);
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="max-w-md w-full bg-[#1E293B]/80 backdrop-blur-xl p-10 rounded-[2.5rem] border border-[#334155] shadow-2xl font-sans">
-      <div className="text-center mb-8">
+    <div className="max-w-md w-full bg-[#1E293B]/80 backdrop-blur-xl p-10 rounded-[2.5rem] border border-[#334155] shadow-2xl font-sans text-center">
+      <div className="mb-8">
         <h1 className="text-4xl font-black bg-gradient-to-r from-[#7C3AED] to-[#C084FC] bg-clip-text text-transparent italic uppercase tracking-tighter">GSA Hub</h1>
-        <p className="text-[#94A3B8] text-[10px] font-black uppercase tracking-[0.2em] mt-2 italic">Gomes Serviços Ágeis</p>
+        <p className="text-[#94A3B8] text-[10px] font-black uppercase tracking-widest mt-2 italic">Gomes Serviços Ágeis</p>
       </div>
 
-      <form onSubmit={handleRegister} className="space-y-4">
+      <form onSubmit={handleRegister} className="space-y-4 text-left">
         <div>
-          <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1 ml-2 text-left">Nome ou Razão</label>
-          <input type="text" value={name} onChange={(e) => setName(e.target.value)} required className="w-full p-4 bg-[#0a0015]/60 border border-[#334155] rounded-2xl text-white focus:border-[#7C3AED] outline-none transition-all placeholder:text-gray-700" placeholder="Danilo Gomes" />
+          <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1 ml-2">Nome Completo</label>
+          <input type="text" value={name} onChange={(e) => setName(e.target.value)} required className="w-full p-4 bg-[#0a0015]/60 border border-[#334155] rounded-2xl text-white focus:border-[#7C3AED] outline-none transition-all placeholder:text-gray-800" placeholder="Seu nome" />
         </div>
 
         <div>
-          <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1 ml-2 text-left">CPF ou CNPJ</label>
-          <input type="text" value={cpfCnpj} onChange={(e) => setCpfCnpj(e.target.value)} required className="w-full p-4 bg-[#0a0015]/60 border border-[#334155] rounded-2xl text-white focus:border-[#7C3AED] outline-none transition-all placeholder:text-gray-700" placeholder="000.000.000-00" />
+          <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1 ml-2">CPF ou CNPJ</label>
+          <input type="text" value={cpfCnpj} onChange={(e) => setCpfCnpj(e.target.value)} required className="w-full p-4 bg-[#0a0015]/60 border border-[#334155] rounded-2xl text-white focus:border-[#7C3AED] outline-none transition-all placeholder:text-gray-800" placeholder="000.000.000-00" />
         </div>
 
         <div>
-          <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1 ml-2 text-left">E-mail</label>
-          <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required className="w-full p-4 bg-[#0a0015]/60 border border-[#334155] rounded-2xl text-white focus:border-[#7C3AED] outline-none transition-all placeholder:text-gray-700" placeholder="contato@gsa.com" />
+          <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1 ml-2">E-mail</label>
+          <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required className="w-full p-4 bg-[#0a0015]/60 border border-[#334155] rounded-2xl text-white focus:border-[#7C3AED] outline-none transition-all placeholder:text-gray-800" placeholder="seu@email.com" />
         </div>
 
         <div>
-          <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1 ml-2 text-left">Senha</label>
-          <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={6} className="w-full p-4 bg-[#0a0015]/60 border border-[#334155] rounded-2xl text-white focus:border-[#7C3AED] outline-none transition-all placeholder:text-gray-700" placeholder="Mínimo 6 dígitos" />
+          <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1 ml-2">Senha</label>
+          <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={6} className="w-full p-4 bg-[#0a0015]/60 border border-[#334155] rounded-2xl text-white focus:border-[#7C3AED] outline-none transition-all placeholder:text-gray-800" placeholder="••••••••" />
         </div>
 
         <button type="submit" disabled={loading} className="w-full py-5 bg-[#7C3AED] hover:bg-[#6D28D9] text-white font-black rounded-2xl transition-all shadow-xl shadow-[#7C3AED]/20 uppercase text-xs tracking-widest mt-4">
-          {loading ? 'PROCESSANDO...' : 'CRIAR MINHA CONTA'}
+          {loading ? 'CRIANDO...' : 'FINALIZAR CADASTRO'}
         </button>
 
-        {error && <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl text-red-500 text-[10px] font-bold text-center uppercase tracking-widest leading-relaxed mt-4">{error}</div>}
-        {message && <div className="p-4 bg-green-500/10 border border-green-500/20 rounded-xl text-green-500 text-[10px] font-bold text-center uppercase tracking-widest leading-relaxed mt-4">{message}</div>}
+        {error && <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl text-red-500 text-[10px] font-bold text-center uppercase tracking-widest mt-4">{error}</div>}
+        {message && <div className="p-4 bg-green-500/10 border border-green-500/20 rounded-xl text-green-500 text-[10px] font-bold text-center uppercase tracking-widest mt-4">{message}</div>}
       </form>
 
-      <div className="mt-8 pt-6 border-t border-[#334155]/50 text-center">
+      <div className="mt-8 pt-6 border-t border-[#334155]/50">
         <Link href="/login" className="text-[#94A3B8] hover:text-white font-bold uppercase text-[10px] tracking-widest flex items-center justify-center gap-2 transition-all">
-          Já sou cliente GSA <ArrowRight size={14} />
+          Voltar para o Login <ArrowRight size={14} />
         </Link>
       </div>
     </div>
@@ -130,8 +124,8 @@ function RegisterContent() {
 
 export default function RegisterPage() {
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#0a0015] to-[#1a0033] px-4">
-      <Suspense fallback={<div className="text-[#7C3AED] font-black animate-pulse uppercase tracking-widest">GSA HUB...</div>}>
+    <div className="min-h-screen flex items-center justify-center bg-[#0a0015] px-4">
+      <Suspense fallback={<div className="text-[#7C3AED] font-black animate-pulse uppercase tracking-widest text-center">Iniciando...</div>}>
         <RegisterContent />
       </Suspense>
     </div>
