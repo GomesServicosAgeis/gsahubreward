@@ -7,20 +7,20 @@ export async function POST(req: Request) {
     const event = body.event;
     const payment = body.payment;
 
-    console.log(`[GSA DEBUG] Recebido: ${event} | Pagamento: ${payment.id}`);
+    console.log(`[GSA DEBUG] Evento Recebido: ${event} | Pagamento: ${payment.id}`);
 
-    // Adicionei PAYMENT_CREATED apenas para você validar que o banco está gravando
-    const eventsToProcess = ['PAYMENT_RECEIVED', 'PAYMENT_CONFIRMED', 'PAYMENT_CREATED'];
+    // Incluímos 'PAYMENT_CREATED' para que o sistema libere assim que a fatura for gerada (Ideal para testes)
+    const validEvents = ['PAYMENT_RECEIVED', 'PAYMENT_CONFIRMED', 'PAYMENT_CREATED'];
 
-    if (eventsToProcess.includes(event)) {
+    if (validEvents.includes(event)) {
       const supabase = await createSupabaseServer();
       const productId = payment.externalReference; 
 
-      // Busca por Email ou CPF (Exatamente como estão no seu SQL da imagem 2)
+      // Busca o usuário pelo e-mail (conforme vimos no seu SQL, o e-mail 'danilolg22@outlook.com' existe)
       const { data: userProfile, error: userError } = await supabase
         .from('users')
         .select('id, tenant_id, referred_by_code, email')
-        .or(`email.eq.${payment.email || 'null'},cpf_cnpj.eq.${payment.cpfCnpj || 'null'}`)
+        .or(`email.eq.${payment.email || 'vazio'},cpf_cnpj.eq.${payment.cpfCnpj || 'vazio'}`)
         .maybeSingle();
 
       if (!userProfile) {
@@ -28,7 +28,16 @@ export async function POST(req: Request) {
         return NextResponse.json({ success: true, message: 'User not found' }, { status: 200 });
       }
 
-      // Ativa a licença
+      // 1. Registra bônus de indicação
+      if (userProfile.referred_by_code) {
+        await supabase.from('referral_usages').upsert({
+          user_id: userProfile.id,
+          product_id: productId,
+          referral_code: userProfile.referred_by_code
+        }, { onConflict: 'user_id, product_id' });
+      }
+
+      // 2. Libera a assinatura imediatamente
       const { error: subError } = await supabase.from('subscriptions').upsert({
         tenant_id: userProfile.tenant_id,
         user_id: userProfile.id,
@@ -41,16 +50,16 @@ export async function POST(req: Request) {
 
       if (subError) {
         console.error('❌ [GSA DB ERROR]:', subError.message);
-        return NextResponse.json({ error: 'DB Error' }, { status: 200 });
+        throw subError;
       }
 
-      console.log(`🚀 [GSA SUCCESS] Tabela subscriptions atualizada para ${userProfile.email}`);
+      console.log(`🚀 [GSA SUCCESS] Assinatura ATIVA para: ${userProfile.email}`);
     }
 
     return NextResponse.json({ success: true }, { status: 200 });
 
   } catch (error: any) {
-    console.error('❌ [GSA CRITICAL]:', error.message);
+    console.error('❌ [GSA WEBHOOK CRITICAL]:', error.message);
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }
 }
