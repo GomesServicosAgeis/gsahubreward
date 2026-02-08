@@ -1,101 +1,114 @@
 'use client';
 
 import { useState } from 'react';
-import { supabase } from '@/lib/supabase/client'; 
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { supabase } from '@/lib/supabase/client';
+import { Mail, Lock, ArrowRight } from 'lucide-react';
 
 export default function LoginPage() {
+  const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [message, setMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const router = useRouter();
+  const [error, setError] = useState<string | null>(null);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    setMessage(null);
+    setError(null);
 
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
 
-    if (error) {
-      setMessage(error.message);
-      setLoading(false);
-    } else {
+      if (error) {
+        throw new Error(error.message);
+      }
+
+      if (!data.user) {
+        throw new Error('Usuário não encontrado.');
+      }
+
+      // Verifica tenant_id
+      const { data: profile } = await supabase
+        .from('users')
+        .select('tenant_id')
+        .eq('id', data.user.id)
+        .single();
+
+      if (!profile) {
+        setError('Perfil não encontrado. Tente confirmar seu e-mail.');
+        return;
+      }
+
+      // Se tenant_id for NULL, avisa mas permite login (para teste)
+      if (!profile.tenant_id) {
+        alert('Perfil incompleto. Confirme seu e-mail para acesso completo.');
+      }
+
       router.push('/dashboard');
-      router.refresh();
+    } catch (err: any) {
+      setError(err.message || 'Erro ao logar');
+      console.error('Erro no login:', err);
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#0a0015] via-[#1a0033] to-[#0f0c1a] text-[#E2E8F0] flex items-center justify-center p-4">
-      <div className="w-full max-w-md bg-[#1E293B]/70 backdrop-blur-md p-8 rounded-[2rem] border border-[#334155] shadow-2xl relative z-10">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#0a0015] to-[#1a0033] px-4">
+      <div className="max-w-md w-full bg-[#1E293B]/80 backdrop-blur-xl p-10 rounded-[2.5rem] border border-[#334155] shadow-2xl font-sans">
         <div className="text-center mb-8">
-          <h1 className="text-4xl font-black bg-gradient-to-r from-[#7C3AED] to-[#C084FC] bg-clip-text text-transparent inline-block italic uppercase tracking-tighter">
-            GSA Hub
-          </h1>
-          <p className="text-[#94A3B8] mt-2 font-medium">Acesse sua conta para gerenciar seus resultados</p>
+          <h1 className="text-4xl font-black bg-gradient-to-r from-[#7C3AED] to-[#C084FC] bg-clip-text text-transparent italic uppercase tracking-tighter">GSA Hub</h1>
+          <p className="text-[#94A3B8] text-[10px] font-black uppercase tracking-[0.2em] mt-2 italic">Gomes Serviços Ágeis</p>
         </div>
 
-        <form onSubmit={handleLogin} className="space-y-6">
+        <form onSubmit={handleLogin} className="space-y-4">
           <div>
-            <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2 ml-1">E-mail</label>
-            <input
-              type="email"
-              placeholder="seu@email.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="w-full p-3 bg-[#0f172a]/50 border border-[#334155] rounded-xl text-white focus:outline-none focus:border-[#7C3AED] transition-all"
-              required
+            <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1 ml-2 text-left">E-mail</label>
+            <input 
+              type="email" 
+              value={email} 
+              onChange={(e) => setEmail(e.target.value)} 
+              required 
+              className="w-full p-4 bg-[#0a0015]/60 border border-[#334155] rounded-2xl text-white focus:border-[#7C3AED] outline-none transition-all placeholder:text-gray-700" 
+              placeholder="contato@gsa.com" 
             />
           </div>
 
           <div>
-            <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2 ml-1">Senha</label>
-            <input
-              type="password"
-              placeholder="••••••••"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full p-3 bg-[#0f172a]/50 border border-[#334155] rounded-xl text-white focus:outline-none focus:border-[#7C3AED] transition-all"
-              required
+            <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1 ml-2 text-left">Senha</label>
+            <input 
+              type="password" 
+              value={password} 
+              onChange={(e) => setPassword(e.target.value)} 
+              required 
+              className="w-full p-4 bg-[#0a0015]/60 border border-[#334155] rounded-2xl text-white focus:border-[#7C3AED] outline-none transition-all placeholder:text-gray-700" 
+              placeholder="Mínimo 6 dígitos" 
             />
           </div>
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full py-4 bg-gradient-to-r from-[#7C3AED] to-[#A78BFA] hover:from-[#8B5CF6] hover:to-[#C084FC] text-white font-black rounded-xl transition-all shadow-lg shadow-[#7C3AED]/20 active:scale-[0.98] uppercase text-xs tracking-widest disabled:opacity-50"
+          <button 
+            type="submit" 
+            disabled={loading} 
+            className="w-full py-5 bg-[#7C3AED] hover:bg-[#6D28D9] text-white font-black rounded-2xl transition-all shadow-xl shadow-[#7C3AED]/20 uppercase text-xs tracking-widest mt-4 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {loading ? 'Entrando...' : 'Entrar no Sistema'}
+            {loading ? 'ENTRANDO...' : 'ENTRAR'}
           </button>
 
-          {message && (
-            <div className="p-3 bg-[#D73A49]/20 border border-[#D73A49]/50 rounded-lg text-[#D73A49] text-[10px] font-bold text-center uppercase">
-              {message}
+          {error && (
+            <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl text-red-500 text-[10px] font-bold text-center uppercase tracking-widest leading-relaxed mt-4">
+              {error}
             </div>
           )}
-
-          <div className="mt-6 text-center">
-            <Link 
-              href="/forgot-password" 
-              className="inline-block text-[11px] text-[#64748B] hover:text-[#A78BFA] transition-all font-black uppercase tracking-[0.2em] cursor-pointer"
-            >
-              Esqueceu sua senha?
-            </Link>
-          </div>
         </form>
 
         <div className="mt-8 pt-6 border-t border-[#334155]/50 text-center">
-          <Link 
-            href="/register" 
-            className="text-white hover:text-[#A78BFA] font-black text-sm transition-all uppercase italic"
-          >
-            Criar minha conta GSA Hub
+          <Link href="/register" className="text-[#94A3B8] hover:text-white font-bold uppercase text-[10px] tracking-widest flex items-center justify-center gap-2 transition-all">
+            Ainda não tenho conta <ArrowRight size={14} />
           </Link>
         </div>
       </div>

@@ -1,52 +1,55 @@
+// src/app/auth/callback/page.tsx
 'use client';
 
-import { useEffect, Suspense } from 'react'; // Importamos Suspense
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase/client';
 
-// Criamos um componente interno para o conteúdo
-function AuthCallbackContent() {
+export default function AuthCallback() {
   const router = useRouter();
-  const searchParams = useSearchParams();
 
   useEffect(() => {
     const handleCallback = async () => {
-      const { data, error } = await supabase.auth.getSession();
+      try {
+        const { data: { session }, error } = await supabase.auth.getSession();
 
-      if (error) {
-        console.error('Erro no callback:', error);
-        router.push('/login?error=callback_failed');
-        return;
-      }
+        if (error || !session) {
+          console.error('Erro no callback:', error);
+          router.push('/login?error=callback_failed');
+          return;
+        }
 
-      if (data.session) {
-        const redirectTo = searchParams.get('redirect') || '/dashboard';
-        router.push(redirectTo);
-        router.refresh();
-      } else {
-        router.push('/login?error=no_session');
+        // Verifica se tem tenant_id
+        const { data: profile } = await supabase
+          .from('users')
+          .select('tenant_id')
+          .eq('id', session.user.id)
+          .single();
+
+        if (!profile || !profile.tenant_id) {
+          // Se ainda não tem tenant_id (raro, mas possível), pode mostrar erro ou redirecionar
+          router.push('/login?error=no_tenant_profile');
+          return;
+        }
+
+        // Tudo ok → vai para dashboard
+        router.push('/dashboard');
+      } catch (err) {
+        console.error('Erro inesperado no callback:', err);
+        router.push('/login?error=callback_error');
       }
     };
 
     handleCallback();
-  }, [router, searchParams]);
+  }, [router]);
 
   return (
-    <div className="text-center text-white">
-      <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-blue-500 border-solid mx-auto mb-6"></div>
-      <h2 className="text-2xl font-bold mb-2">Processando autenticação...</h2>
-      <p className="text-gray-400">Aguarde um momento, você será redirecionado.</p>
-    </div>
-  );
-}
-
-// O export principal envolve o conteúdo em Suspense
-export default function AuthCallback() {
-  return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-900 to-black">
-      <Suspense fallback={<div className="text-white">Carregando...</div>}>
-        <AuthCallbackContent />
-      </Suspense>
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#0a0015] to-[#1a0033]">
+      <div className="text-center">
+        <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-[#7C3AED] mx-auto mb-4"></div>
+        <p className="text-[#E2E8F0] text-xl font-bold">Confirmando sua conta...</p>
+        <p className="text-[#94A3B8] mt-2">Redirecionando para o dashboard...</p>
+      </div>
     </div>
   );
 }
