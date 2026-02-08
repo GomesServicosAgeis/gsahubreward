@@ -4,13 +4,20 @@ import { NextResponse } from 'next/server';
 export async function POST(req: Request) {
   try {
     const { productId, productName, productPrice } = await req.json();
-    const supabase = await createSupabaseServer();
     
-    // 1. Pega os dados do usuário logado
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+    // Ajustado para ler EXATAMENTE como está no seu .env
+    const API_KEY = process.env.ASAAS_API_KEY;
+    const API_URL = process.env.NEXT_PUBLIC_ASAAS_API_URL; // Aqui estava o erro
 
-    // 2. Busca o CPF/CNPJ e Nome do nosso banco (tabela users)
+    if (!API_KEY || !API_URL) {
+      console.error("❌ Erro de Configuração: Verifique as chaves no painel da Vercel.");
+      return NextResponse.json({ error: 'Erro interno de configuração.' }, { status: 500 });
+    }
+
+    const supabase = await createSupabaseServer();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return NextResponse.json({ error: 'Sessão expirada.' }, { status: 401 });
+
     const { data: profile } = await supabase
       .from('users')
       .select('name, email, cpf_cnpj')
@@ -18,53 +25,50 @@ export async function POST(req: Request) {
       .single();
 
     if (!profile?.cpf_cnpj) {
-      return NextResponse.json({ error: 'CPF/CNPJ não encontrado no perfil.' }, { status: 400 });
+      return NextResponse.json({ error: 'Complete seu perfil com CPF/CNPJ antes de pagar.' }, { status: 400 });
     }
 
-    // 3. Criar ou Buscar Cliente no Asaas
-    // Primeiro, tentamos buscar pelo CPF/CNPJ para não duplicar
-    const customerListResponse = await fetch(`${process.env.ASAAS_API_URL}/customers?cpfCnpj=${profile.cpf_cnpj}`, {
-      headers: { 'access_token': process.env.ASAAS_API_KEY || '' }
+    // 1. Busca ou Cria Cliente no Asaas
+    const customerListResponse = await fetch(`${API_URL}/customers?cpfCnpj=${profile.cpf_cnpj}`, {
+      headers: { 'access_token': API_KEY }
     });
-    const customerListData = await customerListResponse.json();
     
+    const customerListData = await customerListResponse.json();
     let asaasCustomerId;
 
-    if (customerListData.data.length > 0) {
+    if (customerListData.data && customerListData.data.length > 0) {
       asaasCustomerId = customerListData.data[0].id;
     } else {
-      // Se não existe, cria um novo
-      const newCustomerResponse = await fetch(`${process.env.ASAAS_API_URL}/customers`, {
+      const newCustomerResponse = await fetch(`${API_URL}/customers`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'access_token': process.env.ASAAS_API_KEY || ''
+          'access_token': API_KEY
         },
         body: JSON.stringify({
           name: profile.name,
           email: profile.email,
           cpfCnpj: profile.cpf_cnpj,
-          notificationDisabled: false,
+          notificationDisabled: true,
         }),
       });
       const newCustomer = await newCustomerResponse.json();
       asaasCustomerId = newCustomer.id;
     }
 
-    // 4. Criar a Cobrança (Assinatura ou Pagamento Único)
-    // Aqui estamos criando uma cobrança via PIX/Cartão/Boleto
-    const paymentResponse = await fetch(`${process.env.ASAAS_API_URL}/payments`, {
+    // 2. Gera Cobrança
+    const paymentResponse = await fetch(`${API_URL}/payments`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'access_token': process.env.ASAAS_API_KEY || ''
+        'access_token': API_KEY
       },
       body: JSON.stringify({
         customer: asaasCustomerId,
-        billingType: 'UNDEFINED', // Deixa o cliente escolher no checkout do Asaas
+        billingType: 'UNDEFINED', 
         value: productPrice,
-        dueDate: new Date(Date.now() + 1000 * 60 * 60 * 24 * 3).toISOString().split('T')[0], // 3 dias para pagar
-        description: `Assinatura ${productName} - GSA Hub`,
+        dueDate: new Date(Date.now() + 1000 * 60 * 60 * 24 * 3).toISOString().split('T')[0],
+        description: `GSA HUB - Ativação ${productName}`,
         externalReference: productId,
       }),
     });
@@ -74,11 +78,12 @@ export async function POST(req: Request) {
     if (paymentData.invoiceUrl) {
       return NextResponse.json({ checkoutUrl: paymentData.invoiceUrl });
     } else {
-      throw new Error('Erro ao gerar link de pagamento no Asaas');
+      console.error("Erro Asaas:", paymentData);
+      return NextResponse.json({ error: 'Não foi possível gerar a fatura.' }, { status: 400 });
     }
 
   } catch (error: any) {
-    console.error('Erro Checkout Asaas:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.error('Erro Geral Checkout:', error);
+    return NextResponse.json({ error: 'Erro na conexão com o gateway de pagamento.' }, { status: 500 });
   }
 }
