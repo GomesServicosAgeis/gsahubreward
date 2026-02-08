@@ -34,7 +34,7 @@ function RegisterContent() {
     setMessage(null);
 
     try {
-      // 1. Criar no Auth
+      // 1. SignUp no Auth
       const { data: authData, error: signUpError } = await supabase.auth.signUp({
         email,
         password,
@@ -44,10 +44,14 @@ function RegisterContent() {
         },
       });
 
-      if (signUpError) throw signUpError;
-      if (!authData.user) throw new Error('Erro ao criar credenciais.');
+      if (signUpError) {
+        console.error("Erro SMTP/Auth:", signUpError);
+        throw new Error("Erro ao enviar e-mail de confirmação. Verifique as configurações SMTP ou desative a confirmação de e-mail no Supabase.");
+      }
 
-      // 2. Criar no Banco (RPC) - NOMES DOS PARÂMETROS DEVEM SER IDÊNTICOS AO SQL
+      if (!authData.user) throw new Error('Falha ao criar usuário.');
+
+      // 2. RPC para salvar na tabela Users
       const { data: rpcData, error: rpcError } = await supabase.rpc('create_tenant_with_user', {
         p_user_id: authData.user.id,
         p_tenant_name: name,
@@ -57,69 +61,52 @@ function RegisterContent() {
         p_referral_code: referralCode || null
       });
 
-      if (rpcError) throw rpcError;
-      
-      if (rpcData && rpcData.success === false) {
-        throw new Error(rpcData.error || 'Erro na criação do perfil.');
+      if (rpcError) {
+        console.error("Erro RPC Banco:", rpcError);
+        throw new Error("Usuário criado, mas erro ao salvar perfil: " + rpcError.message);
       }
-
-      setMessage('Conta criada! Verifique seu e-mail (via Resend) para confirmar.');
       
-      setName(''); setEmail(''); setPassword(''); setCpfCnpj('');
-
+      setMessage('Cadastro realizado! Verifique seu e-mail.');
     } catch (err: any) {
-      setError(err.message || 'Erro inesperado.');
-      console.error("Erro completo:", err);
+      setError(err.message);
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="max-w-md w-full bg-[#1E293B]/70 backdrop-blur-md p-8 rounded-[2rem] border border-[#334155] shadow-2xl">
+    <div className="max-w-md w-full bg-[#1E293B]/70 backdrop-blur-md p-8 rounded-[2rem] border border-[#334155] shadow-2xl font-sans">
       <div className="text-center mb-8">
-        <h1 className="text-4xl font-black bg-gradient-to-r from-[#7C3AED] to-[#C084FC] bg-clip-text text-transparent italic uppercase tracking-tighter mb-2">GSA Hub</h1>
-        <p className="text-[#94A3B8] text-[10px] font-black uppercase tracking-widest italic">Otimizando sua Gestão</p>
+        <h1 className="text-4xl font-black bg-gradient-to-r from-[#7C3AED] to-[#C084FC] bg-clip-text text-transparent italic uppercase tracking-tighter">GSA Hub</h1>
+        <p className="text-[#94A3B8] text-[10px] font-black uppercase tracking-widest mt-2 italic">Gomes Serviços Ágeis</p>
       </div>
 
       <form onSubmit={handleRegister} className="space-y-4">
         <div>
           <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1 ml-1">Nome Completo</label>
-          <div className="relative">
-            <User className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" size={18} />
-            <input type="text" value={name} onChange={(e) => setName(e.target.value)} required className="w-full pl-12 pr-4 py-3 bg-[#0a0015]/50 border border-[#334155] rounded-xl text-white focus:border-[#7C3AED] outline-none transition-all" placeholder="Nome ou Razão Social" />
-          </div>
+          <input type="text" value={name} onChange={(e) => setName(e.target.value)} required className="w-full p-3 bg-[#0a0015]/50 border border-[#334155] rounded-xl text-white focus:border-[#7C3AED] outline-none" placeholder="Ex: Danilo Gomes" />
         </div>
 
         <div>
           <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1 ml-1">CPF ou CNPJ</label>
-          <div className="relative">
-            <FileText className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" size={18} />
-            <input type="text" value={cpfCnpj} onChange={(e) => setCpfCnpj(e.target.value)} required className="w-full pl-12 pr-4 py-3 bg-[#0a0015]/50 border border-[#334155] rounded-xl text-white focus:border-[#7C3AED] outline-none transition-all" placeholder="000.000.000-00" />
-          </div>
+          <input type="text" value={cpfCnpj} onChange={(e) => setCpfCnpj(e.target.value)} required className="w-full p-3 bg-[#0a0015]/50 border border-[#334155] rounded-xl text-white focus:border-[#7C3AED] outline-none" placeholder="000.000.000-00" />
         </div>
 
         <div>
           <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1 ml-1">E-mail</label>
-          <div className="relative">
-            <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" size={18} />
-            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required className="w-full pl-12 pr-4 py-3 bg-[#0a0015]/50 border border-[#334155] rounded-xl text-white focus:border-[#7C3AED] outline-none transition-all" placeholder="seu@email.com" />
-          </div>
+          <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required className="w-full p-3 bg-[#0a0015]/50 border border-[#334155] rounded-xl text-white focus:border-[#7C3AED] outline-none" placeholder="seu@email.com" />
         </div>
 
         <div>
           <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1 ml-1">Senha</label>
-          <div className="relative">
-            <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" size={18} />
-            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={6} className="w-full pl-12 pr-4 py-3 bg-[#0a0015]/50 border border-[#334155] rounded-xl text-white focus:border-[#7C3AED] outline-none transition-all" placeholder="••••••••" />
-          </div>
+          <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required className="w-full p-3 bg-[#0a0015]/50 border border-[#334155] rounded-xl text-white focus:border-[#7C3AED] outline-none" placeholder="••••••••" />
         </div>
 
         <button type="submit" disabled={loading} className="w-full py-4 bg-[#7C3AED] hover:bg-[#6D28D9] text-white font-black rounded-xl transition-all shadow-lg uppercase text-xs tracking-widest">
-          {loading ? 'PROCESSANDO...' : 'CRIAR CONTA GSA'}
+          {loading ? 'CADASTRANDO...' : 'FINALIZAR CADASTRO'}
         </button>
 
-        {error && <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-500 text-[10px] font-bold text-center uppercase">{error}</div>}
+        {error && <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-500 text-[10px] font-bold text-center uppercase leading-tight">{error}</div>}
         {message && <div className="p-3 bg-green-500/10 border border-green-500/20 rounded-lg text-green-500 text-[10px] font-bold text-center uppercase">{message}</div>}
       </form>
 
@@ -134,8 +121,8 @@ function RegisterContent() {
 
 export default function RegisterPage() {
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[#0a0015] px-4 font-sans text-[#E2E8F0]">
-      <Suspense fallback={<div className="text-[#7C3AED] font-black animate-pulse">CARREGANDO...</div>}>
+    <div className="min-h-screen flex items-center justify-center bg-[#0a0015] px-4">
+      <Suspense fallback={<div className="text-[#7C3AED] font-black animate-pulse uppercase tracking-widest">GSA HUB...</div>}>
         <RegisterContent />
       </Suspense>
     </div>
