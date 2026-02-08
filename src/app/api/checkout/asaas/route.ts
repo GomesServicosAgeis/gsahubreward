@@ -5,13 +5,18 @@ export async function POST(req: Request) {
   try {
     const { productId, productName, productPrice } = await req.json();
     
-    // Ajustado para ler EXATAMENTE como está no seu .env
     const API_KEY = process.env.ASAAS_API_KEY;
-    const API_URL = process.env.NEXT_PUBLIC_ASAAS_API_URL; // Aqui estava o erro
+    const API_URL = process.env.NEXT_PUBLIC_ASAAS_API_URL;
+
+    // Log de diagnóstico (Aparece no Log da Vercel)
+    if (!API_KEY) console.error("❌ ASAAS_API_KEY está faltando.");
+    if (!API_URL) console.error("❌ NEXT_PUBLIC_ASAAS_API_URL está faltando.");
 
     if (!API_KEY || !API_URL) {
-      console.error("❌ Erro de Configuração: Verifique as chaves no painel da Vercel.");
-      return NextResponse.json({ error: 'Erro interno de configuração.' }, { status: 500 });
+      return NextResponse.json({ 
+        error: 'Erro interno de configuração.',
+        details: `Missing: ${!API_KEY ? 'KEY ' : ''}${!API_URL ? 'URL' : ''}`
+      }, { status: 500 });
     }
 
     const supabase = await createSupabaseServer();
@@ -25,10 +30,9 @@ export async function POST(req: Request) {
       .single();
 
     if (!profile?.cpf_cnpj) {
-      return NextResponse.json({ error: 'Complete seu perfil com CPF/CNPJ antes de pagar.' }, { status: 400 });
+      return NextResponse.json({ error: 'Perfil sem CPF/CNPJ.' }, { status: 400 });
     }
 
-    // 1. Busca ou Cria Cliente no Asaas
     const customerListResponse = await fetch(`${API_URL}/customers?cpfCnpj=${profile.cpf_cnpj}`, {
       headers: { 'access_token': API_KEY }
     });
@@ -56,7 +60,6 @@ export async function POST(req: Request) {
       asaasCustomerId = newCustomer.id;
     }
 
-    // 2. Gera Cobrança
     const paymentResponse = await fetch(`${API_URL}/payments`, {
       method: 'POST',
       headers: {
@@ -79,11 +82,11 @@ export async function POST(req: Request) {
       return NextResponse.json({ checkoutUrl: paymentData.invoiceUrl });
     } else {
       console.error("Erro Asaas:", paymentData);
-      return NextResponse.json({ error: 'Não foi possível gerar a fatura.' }, { status: 400 });
+      return NextResponse.json({ error: 'Erro ao gerar fatura.' }, { status: 400 });
     }
 
   } catch (error: any) {
     console.error('Erro Geral Checkout:', error);
-    return NextResponse.json({ error: 'Erro na conexão com o gateway de pagamento.' }, { status: 500 });
+    return NextResponse.json({ error: 'Erro na conexão com o gateway.' }, { status: 500 });
   }
 }
