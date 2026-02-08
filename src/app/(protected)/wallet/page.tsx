@@ -1,168 +1,170 @@
-import { createSupabaseServer } from '@/lib/supabase/server';
-import { redirect } from 'next/navigation';
-import Link from 'next/link';
+'use client';
 
-export default async function WalletPage() {
-  const supabase = await createSupabaseServer();
+import { useEffect, useState } from 'react';
+import { supabase } from '@/lib/supabase/client';
+import { 
+  Wallet, 
+  ArrowUpRight, 
+  ArrowDownRight, 
+  History, 
+  Info,
+  ArrowRightLeft,
+  ChevronRight
+} from "lucide-react";
 
-  const { data: { user } } = await supabase.auth.getUser();
+export default function WalletPage() {
+  const [wallet, setWallet] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
 
-  if (!user) {
-    redirect('/login');
+  useEffect(() => {
+    async function fetchWallet() {
+      // Puxamos os dados da View v_my_wallet que você criou no Supabase
+      const { data, error } = await supabase
+        .from('v_my_wallet')
+        .select('*')
+        .single();
+
+      if (!error) setWallet(data);
+      setLoading(false);
+    }
+    fetchWallet();
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="p-6 flex items-center justify-center min-h-[400px]">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+      </div>
+    );
   }
-
-  const { data: profile } = await supabase
-    .from('users')
-    .select('tenant_id')
-    .eq('id', user.id)
-    .single();
-
-  if (!profile?.tenant_id) {
-    redirect('/login');
-  }
-
-  const { data: wallet } = await supabase
-    .from('v_my_wallet')
-    .select('*')
-    .single();
-
-  const { data: creditHistory } = await supabase
-    .from('referral_credit_history')
-    .select('*')
-    .eq('tenant_id', profile.tenant_id)
-    .order('created_at', { ascending: false })
-    .limit(20);
-
-  const { data: walletHistory } = await supabase
-    .from('referral_wallet_history')
-    .select('*')
-    .eq('tenant_id', profile.tenant_id)
-    .order('created_at', { ascending: false })
-    .limit(20);
-
-  // Unir e formatar históricos
-  const fullHistory = [...(creditHistory || []), ...(walletHistory || [])]
-    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#0a0015] via-[#1a0033] to-[#0f0c1a] text-[#E2E8F0] pt-24">
-      <main className="max-w-7xl mx-auto p-6 lg:p-10">
-        <header className="mb-12">
-          <h1 className="text-4xl font-extrabold mb-4 bg-gradient-to-r from-[#7C3AED] to-[#C084FC] bg-clip-text text-transparent">
-            Carteira GSA
+    <div className="p-6 space-y-8 max-w-6xl mx-auto">
+      {/* Título e Header */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
+        <div>
+          <h1 className="text-3xl font-bold text-white flex items-center gap-3">
+            <Wallet className="text-blue-500" size={32} /> Minha Carteira Rewards
           </h1>
-          <p className="text-xl text-[#94A3B8]">
-            Gerencie seus ganhos e utilize seus créditos para abater faturas.
-          </p>
-        </header>
+          <p className="text-gray-400 mt-2">Gerencie seus créditos acumulados e histórico de recompensas nominais.</p>
+        </div>
+      </div>
 
-        {/* Grid de Saldos */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-16">
-          <div className="bg-[#1E293B]/70 backdrop-blur-md p-8 rounded-2xl border border-[#334155] shadow-xl relative overflow-hidden group">
-            <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
-              <svg className="w-24 h-24 text-[#28A745]" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 14h-2v-2h2v2zm0-4h-2V7h2v5z"/></svg>
-            </div>
-            <h3 className="text-sm font-bold uppercase tracking-widest text-[#94A3B8] mb-2">Saldo Disponível</h3>
-            <p className="text-6xl font-black text-[#28A745] tracking-tighter">
-              R$ {wallet?.saldo_disponivel?.toFixed(2) ?? '0.00'}
-            </p>
-            <div className="flex gap-4 mt-6 pt-6 border-t border-[#334155]/50">
-              <div>
-                <p className="text-[10px] text-[#64748B] uppercase font-bold">Total Recebido</p>
-                <p className="text-lg font-semibold text-white">R$ {wallet?.total_recebido?.toFixed(2) ?? '0.00'}</p>
-              </div>
-              <div className="border-l border-[#334155]/50 pl-4">
-                <p className="text-[10px] text-[#64748B] uppercase font-bold">Total Usado</p>
-                <p className="text-lg font-semibold text-[#A78BFA]">R$ {wallet?.total_usado?.toFixed(2) ?? '0.00'}</p>
-              </div>
-            </div>
+      {/* Cards de Saldo Principal */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="bg-gradient-to-br from-blue-600 to-blue-800 p-8 rounded-2xl shadow-xl shadow-blue-500/10 border border-white/10 relative overflow-hidden group">
+          <div className="absolute -right-4 -top-4 text-white/10 group-hover:scale-110 transition-transform">
+            <Wallet size={120} />
           </div>
-
-          <div className="bg-[#1E293B]/70 backdrop-blur-md p-8 rounded-2xl border border-[#334155] shadow-xl relative overflow-hidden group">
-            <h3 className="text-sm font-bold uppercase tracking-widest text-[#94A3B8] mb-2">Créditos Pendentes</h3>
-            <p className="text-6xl font-black text-[#7C3AED] tracking-tighter">
-              R$ {wallet?.creditos_pendentes?.toFixed(2) ?? '0.00'}
-            </p>
-            <p className="mt-6 pt-6 border-t border-[#334155]/50 text-sm text-[#94A3B8]">
-              Última atualização: <span className="text-white font-medium">{wallet?.last_activity_at ? new Date(wallet.last_activity_at).toLocaleDateString('pt-BR') : 'Nenhum registro'}</span>
-            </p>
+          <span className="text-blue-100 text-sm font-bold uppercase tracking-wider">Saldo Disponível</span>
+          <div className="text-5xl font-black text-white mt-2">
+            R$ {wallet?.saldo_disponivel?.toFixed(2) || '0,00'}
+          </div>
+          <div className="mt-6 flex items-center gap-2 text-blue-200 text-xs bg-black/20 w-fit px-3 py-1.5 rounded-full">
+            <Info size={14} /> Abatimento automático em faturas
           </div>
         </div>
 
-        {/* Histórico */}
-        <section className="mb-20">
-          <h2 className="text-3xl font-bold mb-8 bg-gradient-to-r from-[#A78BFA] to-[#C084FC] bg-clip-text text-transparent">
-            Histórico de Transações
-          </h2>
+        <div className="bg-gray-800/40 border border-gray-700 p-6 rounded-2xl backdrop-blur-sm">
+          <div className="flex justify-between items-start">
+            <span className="text-gray-400 text-sm font-bold">Total Recebido</span>
+            <div className="p-2 bg-green-500/10 rounded-lg"><ArrowUpRight className="text-green-500" size={20} /></div>
+          </div>
+          <div className="text-2xl font-black text-white mt-2">
+            R$ {wallet?.total_recebido?.toFixed(2) || '0,00'}
+          </div>
+          <p className="text-[10px] text-gray-500 mt-4 uppercase">Soma de todas as indicações pagas</p>
+        </div>
 
-          <div className="bg-[#1E293B]/70 backdrop-blur-md rounded-2xl border border-[#334155] overflow-hidden shadow-2xl">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left">
-                <thead className="bg-[#0f172a]/50 border-b border-[#334155]">
-                  <tr>
-                    <th className="px-6 py-5 text-[#94A3B8] font-semibold uppercase text-[10px] tracking-widest">Data</th>
-                    <th className="px-6 py-5 text-[#94A3B8] font-semibold uppercase text-[10px] tracking-widest">Tipo</th>
-                    <th className="px-6 py-5 text-[#94A3B8] font-semibold uppercase text-[10px] tracking-widest">Valor</th>
-                    <th className="px-6 py-5 text-[#94A3B8] font-semibold uppercase text-[10px] tracking-widest">Saldo Após</th>
-                    <th className="px-6 py-5 text-[#94A3B8] font-semibold uppercase text-[10px] tracking-widest">Descrição</th>
+        <div className="bg-gray-800/40 border border-gray-700 p-6 rounded-2xl backdrop-blur-sm">
+          <div className="flex justify-between items-start">
+            <span className="text-gray-400 text-sm font-bold">Total Utilizado</span>
+            <div className="p-2 bg-red-500/10 rounded-lg"><ArrowDownRight className="text-red-500" size={20} /></div>
+          </div>
+          <div className="text-2xl font-black text-white mt-2">
+            R$ {wallet?.total_usado?.toFixed(2) || '0,00'}
+          </div>
+          <p className="text-[10px] text-gray-500 mt-4 uppercase">Descontos já aplicados em sistemas</p>
+        </div>
+      </div>
+
+      {/* Seção de Transferência (Sua Regra de Negócio) */}
+      <div className="bg-gray-800/80 border border-blue-500/30 rounded-2xl p-6 relative overflow-hidden">
+        <div className="absolute right-0 top-0 h-full w-1 bg-blue-500"></div>
+        <div className="flex flex-col md:flex-row justify-between items-center gap-6">
+          <div className="space-y-2">
+            <h3 className="text-white font-bold text-lg flex items-center gap-2">
+              <ArrowRightLeft size={22} className="text-blue-400" /> Transferência Cross-Product
+            </h3>
+            <p className="text-gray-400 text-sm max-w-xl">
+              O bônus de 20% é automático no sistema indicado. Caso possua excedente, você pode transferir o 
+              valor nominal (R$) para abater até 80% de outros sistemas GSA em sua conta.
+            </p>
+          </div>
+
+          <button className="whitespace-nowrap bg-blue-600 hover:bg-blue-500 text-white px-6 py-3 rounded-xl font-black text-xs transition-all flex items-center gap-2 group shadow-lg shadow-blue-600/20">
+            TRANSFERIR SALDO <ChevronRight size={16} className="group-hover:translate-x-1 transition-transform" />
+          </button>
+        </div>
+      </div>
+
+      {/* Histórico de Transações */}
+      <div className="space-y-4">
+        <h2 className="text-xl font-bold text-white flex items-center gap-2">
+          <History size={20} className="text-blue-500" /> Extrato Rewards
+        </h2>
+        
+        <div className="bg-gray-800/30 border border-gray-700 rounded-2xl overflow-hidden shadow-2xl">
+          <table className="w-full text-left">
+            <thead className="bg-gray-800/60 text-gray-400 text-[10px] uppercase tracking-widest font-black">
+              <tr>
+                <th className="px-6 py-4">Data</th>
+                <th className="px-6 py-4">Evento / Origem</th>
+                <th className="px-6 py-4 text-right">Valor</th>
+                <th className="px-6 py-4 text-right">Saldo Final</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-700/50">
+              {!wallet?.historico_recente || wallet.historico_recente.length === 0 ? (
+                <tr>
+                  <td colSpan={4} className="px-6 py-12 text-center text-gray-500 italic bg-black/10">
+                    Nenhuma movimentação registrada na carteira ainda.
+                  </td>
+                </tr>
+              ) : (
+                wallet.historico_recente.map((item: any, idx: number) => (
+                  <tr key={idx} className="hover:bg-white/5 transition-colors group">
+                    <td className="px-6 py-5 text-sm text-gray-500 font-mono">
+                      {new Date(item.data).toLocaleDateString('pt-BR')}
+                    </td>
+                    <td className="px-6 py-5">
+                      <div className="text-sm font-bold text-white group-hover:text-blue-400 transition-colors">
+                        {item.descricao}
+                      </div>
+                      <div className="flex items-center gap-2 mt-1">
+                         <span className="text-[9px] bg-blue-500/10 text-blue-400 px-2 py-0.5 rounded font-black uppercase tracking-tighter border border-blue-500/20">
+                            {item.produto || 'GERAL'}
+                         </span>
+                         <span className="text-[9px] text-gray-600 uppercase font-bold">{item.tipo}</span>
+                      </div>
+                    </td>
+                    <td className={`px-6 py-5 text-right text-sm font-black ${
+                      item.tipo.includes('earned') || item.tipo.includes('overflow') || item.tipo.includes('received') 
+                        ? 'text-green-400' 
+                        : 'text-red-400'
+                    }`}>
+                      {item.tipo.includes('earned') || item.tipo.includes('overflow') || item.tipo.includes('received') ? '+' : '-'} R$ {item.valor.toFixed(2)}
+                    </td>
+                    <td className="px-6 py-5 text-right text-sm text-gray-300 font-mono font-medium">
+                      R$ {item.saldo_apos.toFixed(2)}
+                    </td>
                   </tr>
-                </thead>
-                <tbody className="divide-y divide-[#334155]/50">
-                  {fullHistory.length > 0 ? (
-                    fullHistory.map((entry: any, index) => {
-                      const isEntry = entry.amount > 0;
-                      return (
-                        <tr key={index} className="hover:bg-[#7C3AED]/5 transition-colors">
-                          <td className="px-6 py-5 text-sm text-[#94A3B8]">
-                            {new Date(entry.created_at).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}
-                          </td>
-                          <td className="px-6 py-5">
-                            <span className={`px-3 py-1 rounded-full text-[10px] font-black border uppercase ${
-                              isEntry 
-                                ? 'bg-green-500/10 text-green-400 border-green-500/20'
-                                : 'bg-[#7C3AED]/10 text-[#A78BFA] border-[#7C3AED]/20'
-                            }`}>
-                              {entry.type === 'earned' || entry.type === 'received' ? 'Entrada' : 'Saída'}
-                            </span>
-                          </td>
-                          <td className={`px-6 py-5 font-bold ${isEntry ? 'text-[#28A745]' : 'text-[#E2E8F0]'}`}>
-                            {isEntry ? '+' : '-'} R$ {Math.abs(entry.amount).toFixed(2)}
-                          </td>
-                          <td className="px-6 py-5 text-sm font-mono text-white">
-                            R$ {entry.balance_after?.toFixed(2) ?? '0.00'}
-                          </td>
-                          <td className="px-6 py-5 text-sm text-[#94A3B8]">
-                            {entry.description}
-                          </td>
-                        </tr>
-                      );
-                    })
-                  ) : (
-                    <tr>
-                      <td colSpan={5} className="px-6 py-20 text-center text-[#64748B]">
-                        Nenhuma movimentação registrada.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </section>
-
-        {/* Rodapé com Ação */}
-        <div className="flex flex-col items-center gap-6 pb-20">
-          <Link
-            href="/wallet/transfer"
-            className="px-12 py-4 bg-gradient-to-r from-[#7C3AED] to-[#A78BFA] hover:from-[#8B5CF6] hover:to-[#C084FC] text-white font-black rounded-2xl text-lg transition-all shadow-xl shadow-purple-900/30 hover:-translate-y-1 active:scale-95"
-          >
-            Transferir Créditos entre Produtos
-          </Link>
-          <p className="text-sm text-[#64748B]">
-            * Créditos transferidos podem levar até 5 minutos para refletir no sistema.
-          </p>
+                ))
+              )}
+            </tbody>
+          </table>
         </div>
-      </main>
+      </div>
     </div>
   );
 }

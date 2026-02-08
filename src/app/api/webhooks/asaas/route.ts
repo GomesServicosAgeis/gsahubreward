@@ -1,58 +1,61 @@
 import { NextResponse } from 'next/server';
-import { createSupabaseServer } from '@/lib/supabase/server';
+import { supabaseAdmin } from '@/lib/supabase/admin'; // Importante: use o service_role para tabelas protegidas
 
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const supabase = await createSupabaseServer();
-
-    // A Asaas envia o tipo de evento no campo 'event'
     const { event, payment } = body;
 
-    console.log(`[Asaas Webhook] Evento recebido: ${event}`);
+    console.log(`[GSA Webhook] Evento: ${event} | Cliente: ${payment.customer}`);
 
-    // Focamos no evento de pagamento confirmado ou recebido
+    // Só processamos pagamentos confirmados ou recebidos
     if (event === 'PAYMENT_RECEIVED' || event === 'PAYMENT_CONFIRMED') {
       const asaasCustomerId = payment.customer;
-      const amount = payment.value;
+      const amountPaid = payment.value;
       const paymentId = payment.id;
+      
+      // O productId deve vir no externalReference para sabermos qual sistema creditar
+      const productId = payment.externalReference; 
 
-      // 1. Buscar o usuário/tenant no seu banco pelo ID do cliente Asaas
-      const { data: userProfile, error: userError } = await supabase
-        .from('users')
-        .select('id, tenant_id, name')
-        .eq('asaas_customer_id', asaasCustomerId) // Certifique-se de ter essa coluna
+      // 1. Localizar o Tenant pelo ID da Asaas
+      const { data: tenant, error: tenantError } = await supabaseAdmin
+        .from('tenants')
+        .select('id, name, referrer_id')
+        .eq('asaas_customer_id', asaasCustomerId)
         .single();
 
-      if (userError || !userProfile) {
-        console.error(`❌ Usuário não encontrado para o ID Asaas: ${asaasCustomerId}`);
-        return NextResponse.json({ error: 'User not found' }, { status: 404 });
+      if (tenantError || !tenant) {
+        console.error(`❌ Tenant não encontrado para o ID Asaas: ${asaasCustomerId}`);
+        return NextResponse.json({ error: 'Tenant not found' }, { status: 404 });
       }
 
-      // 2. Registrar a entrada na história da carteira
-      // Usando a lógica que você já tem para v_my_wallet
-      const { error: walletError } = await supabase
-        .from('referral_wallet_history')
-        .insert({
-          tenant_id: userProfile.tenant_id,
-          amount: amount,
-          type: 'received',
-          description: `Pagamento recebido via Asaas - Ref: ${paymentId}`,
-          metadata: { asaas_payment_id: paymentId }
-        });
+      // 2. Chamar a Função SQL de Processamento de Pagamento (RPC)
+      // Esta função faz 3 coisas: 
+      // - Ativa a assinatura do cliente
+      // - Gera o código de indicação dele
+      // - Credita 20% ao padrinho (se houver)
+      const { data: result, error: rpcError } = await supabaseAdmin.rpc('process_first_payment', {
+        p_tenant_id: tenant.id,
+        p_product_id: productId,
+        p_invoice_id: null, // Opcional se estiver usando a tabela de faturas
+        p_amount_paid: amountPaid
+      });
 
-      if (walletError) {
-        console.error('❌ Erro ao atualizar carteira:', walletError);
-        throw walletError;
+      if (rpcError) {
+        console.error('❌ Erro ao processar bônus no RPC:', rpcError);
+        // Não travamos o 200 para a Asaas não ficar reenviando, mas logamos o erro
       }
 
-      console.log(`✅ Saldo de R$ ${amount} liberado para ${userProfile.name}`);
+      console.log(`✅ Pagamento Processado: ${tenant.name} | Produto: ${productId}`);
+      if (result?.was_referred) {
+        console.log(`💰 Padrinho creditado com R$ ${result.referrer_credited_value}`);
+      }
     }
 
     return NextResponse.json({ received: true }, { status: 200 });
 
   } catch (error: any) {
-    console.error('❌ Erro no processamento do Webhook:', error.message);
+    console.error('❌ Erro Crítico Webhook:', error.message);
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }
 }
