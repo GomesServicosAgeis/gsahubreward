@@ -3,63 +3,83 @@ import { NextResponse } from 'next/server';
 
 export async function POST(req: Request) {
   try {
-    const body = await req.json();
-    const event = body.event;
-    const payment = body.payment;
+    const { productId, productName, productPrice } = await req.json();
+    
+    const API_KEY = process.env.ASAAS_API_KEY;
+    const API_URL = process.env.NEXT_PUBLIC_ASAAS_API_URL;
 
-    console.log(`[GSA DEBUG] Evento Recebido: ${event} | Pagamento: ${payment.id}`);
-
-    // Incluímos 'PAYMENT_CREATED' para que o sistema libere assim que a fatura for gerada (Ideal para testes)
-    const validEvents = ['PAYMENT_RECEIVED', 'PAYMENT_CONFIRMED', 'PAYMENT_CREATED'];
-
-    if (validEvents.includes(event)) {
-      const supabase = await createSupabaseServer();
-      const productId = payment.externalReference; 
-
-      // Busca o usuário pelo e-mail (conforme vimos no seu SQL, o e-mail 'danilolg22@outlook.com' existe)
-      const { data: userProfile, error: userError } = await supabase
-        .from('users')
-        .select('id, tenant_id, referred_by_code, email')
-        .or(`email.eq.${payment.email || 'vazio'},cpf_cnpj.eq.${payment.cpfCnpj || 'vazio'}`)
-        .maybeSingle();
-
-      if (!userProfile) {
-        console.error('❌ [GSA WEBHOOK] Usuário não encontrado no banco para os dados do Asaas.');
-        return NextResponse.json({ success: true, message: 'User not found' }, { status: 200 });
-      }
-
-      // 1. Registra bônus de indicação
-      if (userProfile.referred_by_code) {
-        await supabase.from('referral_usages').upsert({
-          user_id: userProfile.id,
-          product_id: productId,
-          referral_code: userProfile.referred_by_code
-        }, { onConflict: 'user_id, product_id' });
-      }
-
-      // 2. Libera a assinatura imediatamente
-      const { error: subError } = await supabase.from('subscriptions').upsert({
-        tenant_id: userProfile.tenant_id,
-        user_id: userProfile.id,
-        product_id: productId,
-        status: 'active',
-        asaas_customer_id: payment.customer,
-        payment_method: payment.billingType,
-        updated_at: new Date().toISOString()
-      }, { onConflict: 'user_id, product_id' });
-
-      if (subError) {
-        console.error('❌ [GSA DB ERROR]:', subError.message);
-        throw subError;
-      }
-
-      console.log(`🚀 [GSA SUCCESS] Assinatura ATIVA para: ${userProfile.email}`);
+    if (!API_KEY || !API_URL) {
+      return NextResponse.json({ error: 'Configuração de API ausente.' }, { status: 500 });
     }
 
-    return NextResponse.json({ success: true }, { status: 200 });
+    const supabase = await createSupabaseServer();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return NextResponse.json({ error: 'Sessão expirada.' }, { status: 401 });
+
+    const { data: profile } = await supabase
+      .from('users')
+      .select('name, email, cpf_cnpj')
+      .eq('id', user.id)
+      .single();
+
+    if (!profile?.cpf_cnpj) {
+      return NextResponse.json({ error: 'Perfil sem CPF/CNPJ.' }, { status: 400 });
+    }
+
+    // 1. Busca ou Cria Cliente no Asaas
+    const customerListResponse = await fetch(`${API_URL}/customers?cpfCnpj=${profile.cpf_cnpj}`, {
+      headers: { 'access_token': API_KEY }
+    });
+    
+    const customerListData = await customerListResponse.json();
+    let asaasCustomerId;
+
+    if (customerListData.data && customerListData.data.length > 0) {
+      asaasCustomerId = customerListData.data[0].id;
+    } else {
+      const newCustomerResponse = await fetch(`${API_URL}/customers`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'access_token': API_KEY
+        },
+        body: JSON.stringify({
+          name: profile.name,
+          email: profile.email,
+          cpfCnpj: profile.cpf_cnpj,
+          notificationDisabled: true,
+        }),
+      });
+      const newCustomer = await newCustomerResponse.json();
+      asaasCustomerId = newCustomer.id;
+    }
+
+    // 2. Gera Cobrança com Referência Composta (ID_PRODUTO|ID_USUARIO)
+    const paymentResponse = await fetch(`${API_URL}/payments`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'access_token': API_KEY
+      },
+      body: JSON.stringify({
+        customer: asaasCustomerId,
+        billingType: 'UNDEFINED', 
+        value: productPrice,
+        dueDate: new Date(Date.now() + 1000 * 60 * 60 * 24 * 3).toISOString().split('T')[0],
+        description: `GSA HUB - Ativação ${productName}`,
+        externalReference: `${productId}|${user.id}`, 
+      }),
+    });
+
+    const paymentData = await paymentResponse.json();
+
+    if (paymentData.invoiceUrl) {
+      return NextResponse.json({ checkoutUrl: paymentData.invoiceUrl });
+    } else {
+      return NextResponse.json({ error: 'Erro ao gerar fatura.' }, { status: 400 });
+    }
 
   } catch (error: any) {
-    console.error('❌ [GSA WEBHOOK CRITICAL]:', error.message);
-    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+    return NextResponse.json({ error: 'Erro na conexão com gateway.' }, { status: 500 });
   }
 }
