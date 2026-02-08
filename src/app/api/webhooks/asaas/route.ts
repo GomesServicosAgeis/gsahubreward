@@ -7,18 +7,16 @@ export async function POST(req: Request) {
     const event = body.event;
     const payment = body.payment;
 
-    console.log(`[GSA DEBUG] Evento: ${event} | Pagamento: ${payment.id} | Cliente: ${payment.customer}`);
+    console.log(`[GSA DEBUG] Recebido: ${event} | Pagamento: ${payment.id}`);
 
-    if (event === 'PAYMENT_RECEIVED' || event === 'PAYMENT_CONFIRMED') {
+    // Adicionei PAYMENT_CREATED apenas para você validar que o banco está gravando
+    const eventsToProcess = ['PAYMENT_RECEIVED', 'PAYMENT_CONFIRMED', 'PAYMENT_CREATED'];
+
+    if (eventsToProcess.includes(event)) {
       const supabase = await createSupabaseServer();
-      
       const productId = payment.externalReference; 
-      const asaasCustomerId = payment.customer;
 
-      // BUSCA REFORÇADA: Tentamos achar o usuário de 3 formas
-      // 1. Pelo E-mail enviado na cobrança
-      // 2. Pelo CPF enviado na cobrança
-      // 3. Pelo ID de cliente do Asaas (caso já tenhamos salvo antes)
+      // Busca por Email ou CPF (Exatamente como estão no seu SQL da imagem 2)
       const { data: userProfile, error: userError } = await supabase
         .from('users')
         .select('id, tenant_id, referred_by_code, email')
@@ -26,30 +24,17 @@ export async function POST(req: Request) {
         .maybeSingle();
 
       if (!userProfile) {
-        console.error('❌ [GSA ERROR] Usuário não identificado. Dados recebidos:', {
-          email: payment.email,
-          cpfCnpj: payment.cpfCnpj,
-          customer: asaasCustomerId
-        });
+        console.error('❌ [GSA WEBHOOK] Usuário não encontrado no banco para os dados do Asaas.');
         return NextResponse.json({ success: true, message: 'User not found' }, { status: 200 });
       }
 
-      // 1. Registrar uso do bônus
-      if (userProfile.referred_by_code) {
-        await supabase.from('referral_usages').upsert({
-          user_id: userProfile.id,
-          product_id: productId,
-          referral_code: userProfile.referred_by_code
-        }, { onConflict: 'user_id, product_id' });
-      }
-
-      // 2. Ativar Assinatura
+      // Ativa a licença
       const { error: subError } = await supabase.from('subscriptions').upsert({
         tenant_id: userProfile.tenant_id,
         user_id: userProfile.id,
         product_id: productId,
         status: 'active',
-        asaas_customer_id: asaasCustomerId,
+        asaas_customer_id: payment.customer,
         payment_method: payment.billingType,
         updated_at: new Date().toISOString()
       }, { onConflict: 'user_id, product_id' });
@@ -59,7 +44,7 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: 'DB Error' }, { status: 200 });
       }
 
-      console.log(`🚀 [GSA SUCCESS] Licença ATIVA para ${userProfile.email}`);
+      console.log(`🚀 [GSA SUCCESS] Tabela subscriptions atualizada para ${userProfile.email}`);
     }
 
     return NextResponse.json({ success: true }, { status: 200 });
