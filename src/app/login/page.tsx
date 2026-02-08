@@ -1,17 +1,15 @@
 'use client';
 
 import { useState } from 'react';
-// Importação corrigida: pegamos o objeto 'supabase' direto
 import { supabase } from '@/lib/supabase/client'; 
 import { useRouter } from 'next/navigation';
+import Link from 'next/link'; // Importado para navegação interna
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [message, setMessage] = useState<string | null>(null);
   const router = useRouter();
-
-  // Removido: const supabase = createClient(); (Agora usamos o import direto)
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -77,6 +75,26 @@ export default function LoginPage() {
               {message}
             </div>
           )}
+
+          {/* Ajuste: Links de Cadastro e Recuperação */}
+          <div className="mt-8 pt-6 border-t border-[#334155]/50 text-center space-y-4">
+            <div className="flex flex-col gap-1">
+              <p className="text-[#94A3B8] text-sm">Ainda não faz parte do ecossistema?</p>
+              <Link 
+                href="/register" 
+                className="text-[#A78BFA] hover:text-[#C084FC] font-bold text-sm transition-all hover:underline"
+              >
+                Criar minha conta GSA Hub
+              </Link>
+            </div>
+            
+            <Link 
+              href="/forgot-password" 
+              className="block text-[11px] text-[#64748B] hover:text-[#94A3B8] transition-colors uppercase tracking-widest font-bold"
+            >
+              Esqueceu sua senha?
+            </Link>
+          </div>
         </form>
       </div>
     </div>
