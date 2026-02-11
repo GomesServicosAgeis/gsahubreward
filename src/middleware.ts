@@ -2,30 +2,25 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseServerFromRequest } from '@/lib/supabase/server';
 
 export async function middleware(request: NextRequest) {
-  // 1. Liberação imediata para o Webhook da Asaas
-  if (request.nextUrl.pathname.startsWith('/api/webhooks/asaas')) {
+  // 1. Liberação imediata para o Webhook da Asaas (Caminho corrigido sem o "s")
+  if (request.nextUrl.pathname.startsWith('/api/webhook/asaas')) {
     return NextResponse.next();
   }
 
-  // Cria o cliente Supabase
   const { supabase, response } = await createSupabaseServerFromRequest(request);
-
-  // Verifica autenticação
   const { data: { user } } = await supabase.auth.getUser();
 
-  // Rotas públicas (AJUSTADO: Adicionado /forgot-password e /auth/reset-password)
   const publicPaths = [
     '/login',
     '/register',
-    '/forgot-password',      // <-- ADICIONADO AQUI
-    '/auth/reset-password',  // <-- ADICIONADO PARA O FLUXO DE TROCA DE SENHA
+    '/forgot-password',
+    '/auth/reset-password',
     '/auth/callback',
     '/api/auth',
-    '/api/webhooks/asaas',
+    '/api/webhook/asaas', // Ajustado aqui também
     '/_next',
   ];
 
-  // Se a rota atual começa com alguma das públicas → libera
   const isPublicPath = publicPaths.some(path => 
     request.nextUrl.pathname === path || 
     request.nextUrl.pathname.startsWith(path + '/')
@@ -35,7 +30,6 @@ export async function middleware(request: NextRequest) {
     return response || NextResponse.next();
   }
 
-  // Se NÃO estiver logado → redireciona para login
   if (!user) {
     const loginUrl = new URL('/login', request.url);
     loginUrl.searchParams.set('redirect', request.nextUrl.pathname + request.nextUrl.search);
@@ -43,7 +37,6 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  // Busca informações do perfil
   const { data: profile, error: profileError } = await supabase
     .from('users')
     .select('tenant_id, role, is_super_admin')
@@ -62,24 +55,15 @@ export async function middleware(request: NextRequest) {
   requestHeaders.set('x-user-role', profile.role || 'user');
   requestHeaders.set('x-is-super-admin', profile.is_super_admin ? 'true' : 'false');
 
-  const modifiedRequest = new NextRequest(request, {
-    headers: requestHeaders,
-  });
-
   return NextResponse.next({
-    request: modifiedRequest,
+    request: new NextRequest(request, { headers: requestHeaders }),
     ...(response ? { response } : {}),
   });
 }
 
 export const config = {
   matcher: [
-    /*
-     * Match all request paths except for:
-     * - api/webhooks/asaas
-     * - _next/static, _next/image, favicon.ico
-     * - imagens e assets estáticos
-     */
-    '/((?!api/webhooks/asaas|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|json)$).*)',
+    // O matcher deve ignorar o caminho do webhook para não disparar o middleware nele
+    '/((?!api/webhook/asaas|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|json)$).*)',
   ],
 };
