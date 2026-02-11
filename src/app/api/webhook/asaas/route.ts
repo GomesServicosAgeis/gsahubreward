@@ -1,6 +1,5 @@
-// src/app/api/webhook/asaas/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import { createSupabaseServer } from '@/lib/supabase/server';
+import { supabaseAdmin } from '@/lib/supabase/admin'; // Importando o admin correto
 import { headers } from 'next/headers';
 
 export async function POST(request: NextRequest) {
@@ -9,17 +8,12 @@ export async function POST(request: NextRequest) {
   try {
     const headersList = headers();
     const receivedToken = headersList.get('asaas-access-token');
-    console.log('Token recebido:', receivedToken);
 
     const expectedToken = process.env.ASAAS_WEBHOOK_TOKEN;
-    console.log('Token esperado (do env):', expectedToken);
 
     if (!receivedToken || receivedToken !== expectedToken) {
       console.error('Token inválido ou ausente');
-      // Para teste, comente essa linha temporariamente
-      // return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    } else {
-      console.log('Token OK!');
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     let body;
@@ -28,25 +22,24 @@ export async function POST(request: NextRequest) {
       console.log('Body recebido:', JSON.stringify(body, null, 2));
     } catch (jsonErr) {
       console.error('Erro ao parsear JSON:', jsonErr);
-      body = {};
+      return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
     }
 
     const event = body.event;
     const payment = body.payment;
-
-    console.log('Evento:', event);
-    console.log('Payment ID:', payment?.id);
 
     if (!payment || !payment.id) {
       console.warn('Webhook sem payment ID');
       return NextResponse.json({ received: true });
     }
 
-    const supabase = await createSupabaseServer();
+    // Usamos o supabaseAdmin para garantir que o RLS não bloqueie o processo
+    const supabase = supabaseAdmin;
 
     if (event === 'PAYMENT_CONFIRMED' || event === 'PAYMENT_RECEIVED') {
       console.log('Pagamento confirmado/recebido! Processando...');
 
+      // 1. Buscar a fatura
       const { data: invoice, error: fetchError } = await supabase
         .from('asaas_invoices')
         .select('user_id, amount, status')
@@ -58,25 +51,29 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ received: true });
       }
 
-      console.log('Cobrança encontrada:', invoice);
-
       if (invoice.status === 'PAID') {
         console.log('Já pago anteriormente');
         return NextResponse.json({ received: true });
       }
 
       const creditToAdd = payment.netValue || payment.value;
-      console.log('Valor a creditar:', creditToAdd);
 
-      const { data: userData } = await supabase
+      // 2. Buscar créditos atuais do usuário
+      const { data: userData, error: userError } = await supabase
         .from('users')
         .select('credits')
         .eq('id', invoice.user_id)
         .single();
 
+      if (userError) {
+        console.error('Erro ao buscar usuário:', userError);
+        return NextResponse.json({ error: 'User not found' }, { status: 404 });
+      }
+
       const currentCredits = userData?.credits || 0;
       const newCredits = currentCredits + creditToAdd;
 
+      // 3. Atualizar créditos do usuário
       const { error: updateError } = await supabase
         .from('users')
         .update({
@@ -91,6 +88,7 @@ export async function POST(request: NextRequest) {
         console.log(`Créditos atualizados! Novo saldo: R$ ${newCredits}`);
       }
 
+      // 4. Marcar fatura como paga
       await supabase
         .from('asaas_invoices')
         .update({
@@ -99,6 +97,7 @@ export async function POST(request: NextRequest) {
           net_value: payment.netValue,
         })
         .eq('asaas_id', payment.id);
+        
     } else {
       console.log('Evento não tratado:', event);
     }
@@ -106,6 +105,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ received: true });
   } catch (err) {
     console.error('Erro grave no webhook:', err);
-    return NextResponse.json({ received: true });
+    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }
 }
