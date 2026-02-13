@@ -17,7 +17,8 @@ export async function middleware(request: NextRequest) {
     '/auth/reset-password',
     '/auth/callback',
     '/api/auth',
-    '/api/webhook/asaas', // Ajustado aqui também
+    '/api/webhook/asaas',
+    '/api/mercadopago/create', // Ajustado aqui 
     '/_next',
   ];
 

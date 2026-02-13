@@ -7,6 +7,9 @@ import { Wallet, ArrowUpRight, ArrowDownRight, History, Info, ArrowRightLeft, Ch
 export default function WalletPage() {
   const [wallet, setWallet] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [pixLoading, setPixLoading] = useState(false);
+  const [pixData, setPixData] = useState<any>(null);
+  const [pixError, setPixError] = useState<string | null>(null);
 
   useEffect(() => {
     async function fetchWallet() {
@@ -17,12 +20,63 @@ export default function WalletPage() {
     fetchWallet();
   }, []);
 
-  if (loading) return <div className="min-h-screen bg-[#0a0015] flex items-center justify-center"><div className="animate-spin rounded-full h-12 w-12 border-t-2 border-[#7C3AED]"></div></div>;
+  const generatePix = async () => {
+    const amountStr = prompt('Quanto você quer adicionar (R$)?', '10.00');
+    const amount = Number(amountStr?.replace(',', '.'));
+
+    if (!amount || amount <= 0 || isNaN(amount)) {
+      alert('Valor inválido');
+      return;
+    }
+
+    setPixLoading(true);
+    setPixData(null);
+    setPixError(null);
+
+    try {
+      const res = await fetch('/api/mercadopago/create', {
+        method: 'POST',
+        credentials: 'include', // ESSENCIAL: envia cookies da sessão (autenticação Supabase)
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          amount,
+          description: 'Créditos GSA Hub',
+          userEmail: 'danilolg22@outlook.com' // depois pegue do usuário logado
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(`Erro HTTP ${res.status}: ${data.error || 'Falha na API'}`);
+      }
+
+      if (!data.success) {
+        throw new Error(data.error || 'Resposta inválida da API');
+      }
+
+      setPixData(data.payment);
+      alert('Cobrança Pix criada!\n\nCopia e Cola:\n' + data.qrCode);
+      console.log('QR Base64 (para exibir imagem):', data.qrBase64);
+    } catch (err: any) {
+      setPixError(err.message || 'Falha ao gerar Pix');
+      console.error('Erro ao gerar Pix Mercado Pago:', err);
+    } finally {
+      setPixLoading(false);
+    }
+  };
+
+  if (loading) return (
+    <div className="min-h-screen bg-[#0a0015] flex items-center justify-center">
+      <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-[#7C3AED]"></div>
+    </div>
+  );
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#0a0015] via-[#1a0033] to-[#0f0c1a] text-[#E2E8F0] p-6 lg:p-10">
       <div className="max-w-6xl mx-auto space-y-10">
         
+        {/* Cabeçalho */}
         <div className="flex flex-col md:flex-row justify-between items-end gap-4">
           <div>
             <h1 className="text-4xl font-extrabold bg-gradient-to-r from-[#7C3AED] to-[#C084FC] bg-clip-text text-transparent flex items-center gap-4">
@@ -32,7 +86,53 @@ export default function WalletPage() {
           </div>
         </div>
 
-        {/* Cards de Saldo com o estilo do Dashboard */}
+        {/* Botão Gerar Pix Mercado Pago */}
+        <div className="text-center my-8">
+          <button
+            onClick={generatePix}
+            disabled={pixLoading}
+            className="inline-flex items-center px-8 py-4 bg-gradient-to-r from-[#00D4FF] to-[#00BFFF] hover:from-[#00BFFF] hover:to-[#0099CC] text-white font-bold rounded-xl text-lg transition shadow-2xl shadow-[#00D4FF]/30 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {pixLoading ? (
+              <>
+                <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-white mr-3"></div>
+                Gerando Pix...
+              </>
+            ) : (
+              'Gerar Cobrança Pix (Mercado Pago)'
+            )}
+          </button>
+
+          {pixError && (
+            <p className="mt-3 text-red-400 font-medium">{pixError}</p>
+          )}
+
+          {/* Exibe QR Code e Copia e Cola quando gerado */}
+          {pixData && pixData.qrBase64 && (
+            <div className="mt-8 bg-[#1E293B]/80 p-8 rounded-xl border border-[#334155] inline-block max-w-md mx-auto">
+              <img 
+                src={`data:image/png;base64,${pixData.qrBase64}`} 
+                alt="QR Code Pix" 
+                className="mx-auto mb-4 w-48 h-48"
+              />
+              <p className="text-[#94A3B8] text-sm mb-2">Código Pix Copia e Cola:</p>
+              <div className="bg-[#0a0015] p-4 rounded-lg text-white font-mono text-sm break-all">
+                {pixData.qrCode}
+              </div>
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(pixData.qrCode);
+                  alert('Código copiado!');
+                }}
+                className="mt-4 w-full py-3 bg-[#00D4FF] hover:bg-[#00BFFF] text-white font-bold rounded-lg transition"
+              >
+                Copiar Código Pix
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Cards de Saldo */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div className="bg-gradient-to-br from-[#7C3AED] to-[#5B21B6] p-8 rounded-xl shadow-xl shadow-[#7C3AED]/20 border border-white/10 relative overflow-hidden group">
             <span className="text-white/70 text-xs font-bold uppercase tracking-widest">Saldo Disponível</span>
@@ -61,7 +161,7 @@ export default function WalletPage() {
           </div>
         </div>
 
-        {/* Seção de Transferência Estilizada */}
+        {/* Transferência */}
         <div className="bg-[#1E293B]/70 backdrop-blur-md border border-[#7C3AED]/30 rounded-xl p-8 relative overflow-hidden shadow-2xl">
           <div className="flex flex-col md:flex-row justify-between items-center gap-8 relative z-10">
             <div className="space-y-3">
@@ -78,7 +178,7 @@ export default function WalletPage() {
           </div>
         </div>
 
-        {/* Extrato Detalhado */}
+        {/* Extrato */}
         <div className="space-y-6">
           <h2 className="text-2xl font-bold text-[#A78BFA] flex items-center gap-4">
             <History size={24} className="text-[#7C3AED]" /> Extrato Rewards
